@@ -1,45 +1,69 @@
 package com.velvetmotion.app
 
+import android.app.Application
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.io.PrintWriter
+import java.io.StringWriter
+
+var crashError: String? = null
+
+// Класс, который ловит вылеты
+class MyApp : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        Thread.setDefaultUncaughtExceptionHandler { _, throwable ->
+            val sw = StringWriter()
+            throwable.printStackTrace(PrintWriter(sw))
+            crashError = sw.toString()
+            android.os.Process.killProcess(android.os.Process.myPid())
+        }
+    }
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme {
-                VelvetScreen()
+                // Если была ошибка - показываем её текст на белом экране
+                if (crashError != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.White)
+                            .padding(16.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        Text(
+                            text = "ОШИБКА:\n\n$crashError",
+                            color = Color.Red,
+                            fontSize = 12.sp
+                        )
+                    }
+                } else {
+                    // Если ошибок нет - показываем анимацию
+                    VelvetScreen()
+                }
             }
         }
     }
@@ -47,19 +71,31 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun VelvetScreen() {
-    // Состояние: показана карточка или нет
     var isVisible by remember { mutableStateOf(false) }
 
-    // Наша премиальная пружинная анимация
-    val springSpec = spring<Float>(
-        dampingRatio = Spring.DampingRatioLowBouncy, // Легкий отскок
-        stiffness = Spring.StiffnessMediumLow        // Плавность
+    // Используем более безопасный способ анимации
+    val alpha by animateFloatAsState(
+        targetValue = if (isVisible) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "alpha"
+    )
+
+    val scale by animateFloatAsState(
+        targetValue = if (isVisible) 1f else 0.8f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "scale"
     )
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF121212)), // Темный фон в стиле OriginOS
+            .background(Color(0xFF121212)),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -73,15 +109,12 @@ fun VelvetScreen() {
                 fontWeight = FontWeight.Bold
             )
 
-            // Анимируемый блок
-            AnimatedVisibility(
-                visible = isVisible,
-                enter = fadeIn(animationSpec = springSpec) + scaleIn(animationSpec = springSpec, initialScale = 0.8f),
-                exit = fadeOut(animationSpec = springSpec) + scaleOut(animationSpec = springSpec, targetScale = 0.8f)
-            ) {
+            if (isVisible || alpha > 0.01f) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(0.8f)
+                        .alpha(alpha)
+                        .scale(scale)
                         .background(Color(0xFF2C2C2C), RoundedCornerShape(24.dp))
                         .padding(32.dp),
                     contentAlignment = Alignment.Center
@@ -94,7 +127,6 @@ fun VelvetScreen() {
                 }
             }
 
-            // Кнопка управления
             Button(
                 onClick = { isVisible = !isVisible },
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBB86FC)),
